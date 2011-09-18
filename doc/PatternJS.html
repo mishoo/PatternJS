@@ -1,0 +1,1494 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+               "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+lang="en" xml:lang="en">
+<head>
+<title>PatternJS — regular expressions for trees</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+<meta name="generator" content="Org-mode"/>
+<meta name="generated" content="2011-09-18 17:49:45 EEST"/>
+<meta name="author" content="Mihai Bazon"/>
+<meta name="description" content="PatternJS -- regular expressions for tree (arrays of arrays)"/>
+<meta name="keywords" content="javascript, js, regexp, regular expressions, array, tree, LoL"/>
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  html { font-family: Times, serif; font-size: 12pt; }
+  .title  { text-align: center; }
+  .todo   { color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #add8e6; font-weight:normal }
+  .target { }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .right  {margin-left:auto; margin-right:0px;  text-align:right;}
+  .left   {margin-left:0px;  margin-right:auto; text-align:left;}
+  .center {margin-left:auto; margin-right:auto; text-align:center;}
+  p.verse { margin-left: 3% }
+  pre {
+	border: 1pt solid #AEBDCC;
+	background-color: #F3F5F7;
+	padding: 5pt;
+	font-family: courier, monospace;
+        font-size: 90%;
+        overflow:auto;
+  }
+  table { border-collapse: collapse; }
+  td, th { vertical-align: top;  }
+  th.right  { text-align:center;  }
+  th.left   { text-align:center;   }
+  th.center { text-align:center; }
+  td.right  { text-align:right;  }
+  td.left   { text-align:left;   }
+  td.center { text-align:center; }
+  dt { font-weight: bold; }
+  div.figure { padding: 0.5em; }
+  div.figure p { text-align: center; }
+  div.inlinetask {
+    padding:10px;
+    border:2px solid gray;
+    margin:10px;
+    background: #ffffcc;
+  }
+  textarea { overflow-x: auto; }
+  .linenr { font-size:smaller }
+  .code-highlighted {background-color:#ffff00;}
+  .org-info-js_info-navigation { border-style:none; }
+  #org-info-js_console-label { font-size:10px; font-weight:bold;
+                               white-space:nowrap; }
+  .org-info-js_search-highlight {background-color:#ffff00; color:#000000;
+                                 font-weight:bold; }
+  /*]]>*/-->
+</style>
+<link rel="stylesheet" type="text/css" href="docstyle.css" />
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+
+</head>
+<body>
+
+<div id="preamble">
+
+</div>
+
+<div id="content">
+<h1 class="title">PatternJS — regular expressions for trees</h1>
+
+
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">1 pattern.js &ndash; regular expressions for trees </a></li>
+<li><a href="#sec-2">2 Syntax by examples </a>
+<ul>
+<li><a href="#sec-2-1">2.1 Repetition (<code>MANY</code>, <code>MORE</code>) </a></li>
+<li><a href="#sec-2-2">2.2 Wildcard (<code>ANYTHING</code>, <code>WHATEVER</code>) </a></li>
+<li><a href="#sec-2-3">2.3 Greedy and non-greedy repetitions (<code>NG</code> suffix) </a></li>
+<li><a href="#sec-2-4">2.4 To be or not to be (<code>MAYBE</code>) </a></li>
+<li><a href="#sec-2-5">2.5 Alternatives (<code>OR</code>) </a></li>
+<li><a href="#sec-2-6">2.6 Grouping expressions (<code>NAMED</code>, <code>GROUP</code>) </a></li>
+<li><a href="#sec-2-7">2.7 <code>MAYBE</code> ambiguity? </a></li>
+<li><a href="#sec-2-8">2.8 Back references (<code>REF</code>) </a></li>
+<li><a href="#sec-2-9">2.9 Replace nodes </a></li>
+<li><a href="#sec-2-10">2.10 Substructure matching </a></li>
+</ul>
+</li>
+<li><a href="#sec-3">3 UglifyJS AST examples </a>
+<ul>
+<li><a href="#sec-3-1">3.1 Discard redundant block parens </a></li>
+<li><a href="#sec-3-2">3.2 Sample <code>IF</code> optimizations </a></li>
+</ul>
+</li>
+<li><a href="#sec-4">4 API reference </a>
+<ul>
+<li><a href="#sec-4-1">4.1 The <code>onmatch</code> function </a></li>
+<li><a href="#sec-4-2">4.2 The <code>Match</code> objects </a></li>
+</ul>
+</li>
+<li><a href="#sec-5">5 License </a></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-1" class="outline-2">
+<h2 id="sec-1"><span class="section-number-2">1</span> pattern.js &ndash; regular expressions for trees </h2>
+<div class="outline-text-2" id="text-1">
+
+
+<p>
+This is an implementation of a pattern matching engine similar in power to
+regular expressions but applicable to trees (array of arrays, in this case)
+rather than strings.
+</p>
+<p>
+Based on ideas in an excellent paper by Russ Cox<sup><a class="footref" name="fnr.1" href="#fn.1">1</a></sup>, we compile search
+queries to a home-made bytecode and provide a specialized VM to run the
+bytecode.  The VM can only say if a tree matches a query or not; to search,
+we apply the query to all the subtrees.  Speed was not a goal for my
+implementation<sup><a class="footref" name="fnr.2" href="#fn.2">2</a></sup>, but it's pretty fast by my tests.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-2" class="outline-2">
+<h2 id="sec-2"><span class="section-number-2">2</span> Syntax by examples </h2>
+<div class="outline-text-2" id="text-2">
+
+
+<p>
+This library is useful when you need to search something in an array and the
+search is more complicated than what indexOf can handle.  In other words,
+when the search is even moderately complex, you need this tool.
+</p>
+<p>
+For example, suppose you're looking for the sequence 3, 4, 5 in the
+following array:
+</p>
+
+
+
+<pre class="src src-js">[ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+</pre>
+
+
+<p>
+You would like to know at which index it starts.  You'll usually need to
+know where it ends too, but this is a simple expression that doesn't involve
+repetitions, so the end index is trivial to get—it's <code>START + LENGTH</code>.
+</p>
+<p>
+With PatternJS we can use the following code:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">$</span> = require(<span class="org-string">"pattern"</span>);
+<span class="org-keyword">var</span> <span class="org-variable-name">haystack</span> = [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">needle</span> = $.compile(3, 4, 5);
+$.search(haystack, needle, <span class="org-keyword">function</span> onmatch(<span class="org-variable-name">m</span>){
+    console.log(m.$node);              <span class="org-comment-delimiter">// </span><span class="org-comment">== haystack in this case</span>
+    console.log(m.$start);             <span class="org-comment-delimiter">// </span><span class="org-comment">2</span>
+    console.log(m.$end);               <span class="org-comment-delimiter">// </span><span class="org-comment">5</span>
+    console.log(m.$match().content()); <span class="org-comment-delimiter">// </span><span class="org-comment">[ 3, 4, 5 ]</span>
+});
+</pre>
+
+
+<p>
+The above code shows the basic API to this library.  It exports two main
+functions: <code>compile</code> and <code>search</code>.  The first takes a search query and
+returns the compiled bytecode.  The <code>search</code> function takes the array to
+search, the bytecode to run, and an “onmatch” function.  This function takes
+a single argument that contains various information about the match.  Above
+I showed the following 4 properties:
+</p>
+<ul>
+<li><code>$node</code> — the node that matched
+</li>
+<li><code>$start</code> — the position where match starts
+</li>
+<li><code>$end</code> — the position where the match ends
+</li>
+<li><code>$match</code> — this returns a <code>Match</code> object.  I'll describe them later.  For
+  now you can notice that it has a content() method, which returns the node
+  content.  In the case above, <code>$match().content()</code> is the same as
+  <code>$node.slice($start, $end)</code>.
+</li>
+</ul>
+
+
+
+</div>
+
+<div id="outline-container-2-1" class="outline-3">
+<h3 id="sec-2-1"><span class="section-number-3">2.1</span> Repetition (<code>MANY</code>, <code>MORE</code>) </h3>
+<div class="outline-text-3" id="text-2-1">
+
+
+<p>
+The above example is already a bit more than <code>indexOf</code> can handle, but as
+promised, this library is as powerful as regular expressions.  Here's how we
+can handle repetition.  Suppose we want to find blocks of one or more “a”-s
+in an array:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, <span class="org-string">"a"</span>, 3, 4, <span class="org-string">"a"</span>, <span class="org-string">"a"</span>, <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, <span class="org-string">"a"</span>, <span class="org-string">"a"</span>, <span class="org-string">"c"</span> ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile($.MORE(<span class="org-string">"a"</span>));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    <span class="org-comment-delimiter">// </span><span class="org-comment">log where it starts, where it ends, and contents</span>
+    console.log(m.$start, m.$end, m.$match().content());
+});
+</pre>
+
+
+<p>
+We get the following output:
+</p>
+
+
+
+<pre class="src src-js">2 3 [ <span class="org-string">'a'</span> ]
+5 8 [ <span class="org-string">'a'</span>, <span class="org-string">'a'</span>, <span class="org-string">'a'</span> ]
+9 11 [ <span class="org-string">'a'</span>, <span class="org-string">'a'</span> ]
+</pre>
+
+
+<p>
+We can also search for repetitive expressions consisting of more than one
+node.  For example, finding consecutive occurrences of 2, 3, 4 in an array:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 5 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile($.MORE(2, 3, 4));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt; 1 13 [ 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4 ]</span>
+</pre>
+
+
+<p>
+That's right, there's a single contiguous match—the sequence 2, 3, 4 is
+repeated 4 times, starting at index 1 and ending at index 13.
+</p>
+<p>
+<code>MORE</code> is in fact the equivalent of <code>+</code> in ordinary regexps.  It matches its
+argument at least once.  There is also a <code>MANY</code> combinator which is like <code>*</code>
+in regexps—it matches the argument zero or more times:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 2, 4, 4, 4, 1, 2, 4, 0, 2, 0, 1 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(2, $.MANY(4));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+</pre>
+
+
+<p>
+The above matches a 2 followed by zero or more 4-s.  It outputs:
+</p>
+
+
+
+<pre class="src src-js">1 2 [ 2 ]
+3 7 [ 2, 4, 4, 4 ]
+8 10 [ 2, 4 ]
+11 12 [ 2 ]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-2" class="outline-3">
+<h3 id="sec-2-2"><span class="section-number-3">2.2</span> Wildcard (<code>ANYTHING</code>, <code>WHATEVER</code>) </h3>
+<div class="outline-text-3" id="text-2-2">
+
+
+<p>
+Ordinary regexps provide an easy way to match “anything”—via a single dot
+character.  Or to match a sequence of consecutive “anything”-s (which we
+call “whatever”), you would use <code>.*</code>.  PatternJS provides similar features,
+here are quick examples:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-comment-delimiter">// </span><span class="org-comment">match any sequence of type 2, X, 4</span>
+<span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 4, 2, 4, 2, 1, 4, 5 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(2, $.ANYTHING(), 4);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+</pre>
+
+
+<p>
+outputs:
+</p>
+
+
+
+<pre class="src src-js">1 4 [ 2, 3, 4 ]
+6 9 [ 2, 1, 4 ]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-3" class="outline-3">
+<h3 id="sec-2-3"><span class="section-number-3">2.3</span> Greedy and non-greedy repetitions (<code>NG</code> suffix) </h3>
+<div class="outline-text-3" id="text-2-3">
+
+
+<p>
+A similar example with <code>WHATEVER</code>:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 4, 2, 4, 2, 1, <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, 4, 5 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(2, $.WHATEVER(), 4);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+</pre>
+
+
+<p>
+The output is interesting:
+</p>
+
+
+
+<pre class="src src-js">1 11 [ 2, 3, 4, 2, 4, 2, 1, <span class="org-string">'a'</span>, <span class="org-string">'b'</span>, 4 ]
+</pre>
+
+
+<p>
+Similar to ordinary regexps, the <code>MANY</code> and <code>MORE</code> constructs are “greedy”.
+They match as many characters as possible.  For this reason, because the
+expression that we're looking for is “2 followed by whatever sequence
+followed by 4” it matches from the first 2 in the array to the last 4.
+</p>
+<p>
+There are cases, like the above, when we want the repetitive constructs to
+be “non-greedy”.  We provide <code>MANYNG</code>, <code>MORENG</code> and <code>WHATEVERNG</code> combinators
+for this case.  By the way, <code>WHATEVER()</code> is equivalent to
+<code>MANY(ANYTHING())</code>, and <code>WHATEVERNG()</code> is equivalent to
+=MANYNG(ANYTHING())=<sup><a class="footref" name="fnr.3" href="#fn.3">3</a></sup>.
+</p>
+<p>
+The non-greedy pattern in the above example would be:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(2, $.WHATEVERNG(), 4);
+</pre>
+
+
+<p>
+and the output:
+</p>
+
+
+
+<pre class="src src-js">1 4 [ 2, 3, 4 ]
+4 6 [ 2, 4 ]
+6 11 [ 2, 1, <span class="org-string">'a'</span>, <span class="org-string">'b'</span>, 4 ]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-4" class="outline-3">
+<h3 id="sec-2-4"><span class="section-number-3">2.4</span> To be or not to be (<code>MAYBE</code>) </h3>
+<div class="outline-text-3" id="text-2-4">
+
+
+<p>
+In ordinary regexps this is provided by the question-mark operator; in
+PatternJS it's called <code>MAYBE</code>.  Here's an example that matches sequences of
+“a”, “b”, optionally separated by a dash:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, 3, <span class="org-string">"a"</span>, <span class="org-string">"x"</span>, <span class="org-string">"b"</span>, <span class="org-string">"a"</span>, <span class="org-string">"-"</span>, <span class="org-string">"b"</span>, 3, <span class="org-string">"a"</span>, <span class="org-string">"b"</span> ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(<span class="org-string">"a"</span>, $.MAYBE(<span class="org-string">"-"</span>), <span class="org-string">"b"</span>);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">2 4 [ 'a', 'b' ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">8 11 [ 'a', '-', 'b' ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">12 14 [ 'a', 'b' ]</span>
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-5" class="outline-3">
+<h3 id="sec-2-5"><span class="section-number-3">2.5</span> Alternatives (<code>OR</code>) </h3>
+<div class="outline-text-3" id="text-2-5">
+
+
+<p>
+You can use <code>OR</code> to provide alternatives at a certain point.  Example: match
+consecutive sequences of 1, 2, or 3:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 3, 2, 1, 4, 5, 6, 2 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile($.MORE($.OR(1, 2, 3)));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">0 3 [ 1, 2, 3 ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">9 12 [ 3, 2, 1 ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">15 16 [ 2 ]</span>
+</pre>
+
+
+<p>
+Note that <code>OR</code> takes multiple “atoms” and returns a combinator that matches
+any of them.  Passing that to <code>MORE</code>, I got a combinator that matches a
+sequence of 1, 2 or 3.  In a regexp you would do “(1|2|3)+”.  Because <code>OR</code>
+returns a single expression, there's an implicit grouping above.
+</p>
+<p>
+How would you devise an expression matching “a”, “b” OR “c”, “d” (that is,
+either an “a” followed by a “b”, or a “c” followed by a “d”).  You would
+need one of the combinators in the next section.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-2-6" class="outline-3">
+<h3 id="sec-2-6"><span class="section-number-3">2.6</span> Grouping expressions (<code>NAMED</code>, <code>GROUP</code>) </h3>
+<div class="outline-text-3" id="text-2-6">
+
+
+<p>
+In ordinary regexps you can group sub-expressions with parens.  That serves
+two purposes: firstly it can limit action of other operations to only a part
+of the expression, as in <code>a(foo|bar)b</code> — without the parens, the pipe would
+pick between <code>afoo</code> and <code>barb</code>; and secondly, you can reference those groups
+after a match using a convenient shortcut.  In Perl for example, you can
+access each group with <code>$1</code>, <code>$2</code> etc. (a <code>$</code> followed by the group index).
+</p>
+<p>
+<code>GROUP</code> takes any number of expressions and matches when those expressions
+are found in sequence.  It's the solution to the last question in the
+previous section.  To match either “a” followed by “b”, or “c” followed by
+“d”:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, <span class="org-string">"a"</span>, 3, <span class="org-string">"c"</span>, <span class="org-string">"d"</span>, 4, <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, 5, <span class="org-string">"c"</span>, <span class="org-string">"e"</span> ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile($.OR($.GROUP(<span class="org-string">"a"</span>, <span class="org-string">"b"</span>),
+                         $.GROUP(<span class="org-string">"c"</span>, <span class="org-string">"d"</span>)));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">4 6 [ 'c', 'd' ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">7 9 [ 'a', 'b' ]</span>
+</pre>
+
+
+<p>
+<code>NAMED</code> is like <code>GROUP</code>, but the first argument must be a name by which you
+want to access the match later.  For example:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [
+    <span class="org-string">"foo"</span>, <span class="org-string">"="</span>, 1,
+    <span class="org-string">"bar"</span>, <span class="org-string">"="</span>, 2,
+    <span class="org-string">"baz"</span>, <span class="org-string">"="</span>, 3
+];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"key"</span>, $.ANYTHING()),
+    <span class="org-string">"="</span>,
+    $.NAMED(<span class="org-string">"val"</span>) <span class="org-comment-delimiter">// </span><span class="org-comment">missing expression implies $.ANYTHING()</span>
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.key.content(), m.val.content());
+});
+</pre>
+
+
+<p>
+outputs:
+</p>
+
+
+
+<pre class="src src-js">[ <span class="org-string">'foo'</span> ] [ 1 ]
+[ <span class="org-string">'bar'</span> ] [ 2 ]
+[ <span class="org-string">'baz'</span> ] [ 3 ]
+</pre>
+
+
+<p>
+The actual pattern to search for is <code>ANYTHING</code> = <code>ANYTHING</code>.  (the second
+one is <code>$.NAMED("val")</code>, but lacking any expression, <code>ANYTHING()</code> is
+implied).
+</p>
+<p>
+The first <code>ANYTHING</code> is being assigned the name “key”, and the second one
+“val”.  As you can see, on a successful match they become properties of the
+data object “m”.  Those properties are <code>Match</code> objects and they provide some
+useful methods, one of which is <code>content()</code>, which simply returns all the
+matched content.  As you can see above, <code>content()</code> returns an array—because
+expressions can generally match multiple elements.
+</p>
+<p>
+Here's another example to make this more obvious:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [
+    <span class="org-string">"foo"</span>, <span class="org-string">"="</span>, 1,
+    <span class="org-string">"bar"</span>, <span class="org-string">"="</span>, 2,
+    <span class="org-string">"baz"</span>, <span class="org-string">"="</span>, 3
+];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"def"</span>, $.ANYTHING(), <span class="org-string">"="</span>, $.ANYTHING())
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.def.content());
+});
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">[ 'foo', '=', 1 ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">[ 'bar', '=', 2 ]</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">[ 'baz', '=', 3 ]</span>
+</pre>
+
+
+<p>
+As you can see, <code>NAMED</code> can take more than two arguments—anything
+following the name is part of the searched expression.  <code>content()</code> returns
+the three of them this time.
+</p>
+<p>
+When you are only interested in the first element of the <code>content()</code> array,
+you can use <code>first()</code> as a shortcut for <code>content()[0]</code>.  There is more to be
+said about <code>Match</code> objects, as you'll see below.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-2-7" class="outline-3">
+<h3 id="sec-2-7"><span class="section-number-3">2.7</span> <code>MAYBE</code> ambiguity? </h3>
+<div class="outline-text-3" id="text-2-7">
+
+
+<p>
+<code>NAMED</code> introduces a funny question when used in conjunction with the
+<code>MAYBE</code> combinator.  What does the following output:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, <span class="org-string">"b"</span>, <span class="org-string">"b"</span>, <span class="org-string">"c"</span> ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(<span class="org-string">"a"</span>, $.MAYBE(<span class="org-string">"b"</span>), <span class="org-string">"b"</span>, $.NAMED(<span class="org-string">"f"</span>, $.MORE(<span class="org-string">"b"</span>), <span class="org-string">"c"</span>));
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.f.content());
+});
+</pre>
+
+
+<p>
+Well, it outputs <code>[ 'b', 'c' ]</code>, because even the <code>MAYBE</code> operator is
+greedy!  Being so, it takes as many characters as possible.  The first part
+of the expression could have matched only <code>[ 'a', 'b' ]</code>, instead of <code>[ 'a', 'b', 'b' ]</code>, but the greedy-ish nature of <code>MAYBE</code> made it take all it could.
+</p>
+<p>
+For this reason, even though it seems seldom useful, there is a non-greedy
+version of <code>MAYBE</code>, which, of course, it's called <code>MAYBENG</code>.  With the
+following pattern the result is different:
+</p>
+
+
+
+<pre class="src src-js">pat = $.compile(<span class="org-string">"a"</span>, $.MAYBENG(<span class="org-string">"b"</span>), <span class="org-string">"b"</span>, $.NAMED(<span class="org-string">"f"</span>, $.MORE(<span class="org-string">"b"</span>), <span class="org-string">"c"</span>));
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt; [ 'b', 'b', 'c' ]</span>
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-8" class="outline-3">
+<h3 id="sec-2-8"><span class="section-number-3">2.8</span> Back references (<code>REF</code>) </h3>
+<div class="outline-text-3" id="text-2-8">
+
+
+<p>
+Once you gave a name to a sub-expression, you can refer to it in the search
+query.  This part is commonly <code>\N</code> in regular expressions (where <code>N</code> is the
+index of the parenthesized group).
+</p>
+<p>
+In PatternJS it's <code>REF("name")</code>.  For a quick example, let's try to find all
+sequences of elements that repeat two or more times:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 3, 3, 2, 2, 1, 2, 1, 1, 1, 1, 1, 2, 3, 3 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"a"</span>, $.ANYTHING()),
+    $.MORE(
+        $.REF(<span class="org-string">"a"</span>)
+    )
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+    console.log(<span class="org-string">"    A ="</span>, m.a.content());
+});
+</pre>
+
+
+<p>
+The output is:
+</p>
+
+
+
+<pre class="src src-js">2 5 [ 3, 3, 3 ]
+    A = [ 3 ]
+5 7 [ 2, 2 ]
+    A = [ 2 ]
+9 14 [ 1, 1, 1, 1, 1 ]
+    A = [ 1 ]
+15 17 [ 3, 3 ]
+    A = [ 3 ]
+</pre>
+
+
+<p>
+So the expression is:
+</p>
+<ol>
+<li>accept <i>anything</i>, and <i>name</i> it “a”
+</li>
+<li>accept one or <i>more</i> occurrences of what “a” matched.
+</li>
+</ol>
+
+
+<p>
+Note that because <code>NAMED</code> takes any arbitrary expression, <code>REF</code> in turn is
+able to refer back to an arbitrarily complex match.  It needs not be a
+simple literal:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [
+    1, 2, 3, <span class="org-comment-delimiter">// </span><span class="org-comment">noise</span>
+    <span class="org-string">"a"</span>, <span class="org-string">"+"</span>, 1,
+    4, 5, 6, <span class="org-comment-delimiter">// </span><span class="org-comment">noise</span>
+    <span class="org-string">"a"</span>, <span class="org-string">"+"</span>, 1,
+    <span class="org-string">"foo"</span>, <span class="org-string">"bar"</span>
+];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"a"</span>, $.ANYTHING(), <span class="org-string">"+"</span>, $.ANYTHING()),
+    $.WHATEVER(),
+    $.REF(<span class="org-string">"a"</span>)
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.$start, m.$end, m.$match().content());
+    console.log(<span class="org-string">"    A ="</span>, m.a.content());
+});
+</pre>
+
+
+<p>
+==&gt;
+</p>
+
+
+
+<pre class="src src-js">3 12 [ <span class="org-string">'a'</span>, <span class="org-string">'+'</span>, 1, 4, 5, 6, <span class="org-string">'a'</span>, <span class="org-string">'+'</span>, 1 ]
+    A = [ <span class="org-string">'a'</span>, <span class="org-string">'+'</span>, 1 ]
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-9" class="outline-3">
+<h3 id="sec-2-9"><span class="section-number-3">2.9</span> Replace nodes </h3>
+<div class="outline-text-3" id="text-2-9">
+
+
+<p>
+One common feature of regular expression engines is the ability to replace
+either entirely, or partially, the matched expression with something else.
+PatternJS provides some features to help with that.
+</p>
+<p>
+Here's the most basic sample:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [ 1, 2, 3, 4, 5 ];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    2, 3, 4
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    m.$match().replace([ <span class="org-string">"cut"</span> ]);
+});
+console.log(a);
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">[ 1, 'cut', 5 ]</span>
+</pre>
+
+
+<p>
+More generally, a <code>Match</code> node has the following methods:
+</p>
+<ul>
+<li><code>content()</code> — which you already saw: it returns an array with the
+  elements matched by this sub-expression.
+</li>
+<li><code>first()</code> — equivalent to <code>content()[0]</code>
+</li>
+<li><code>replace(content)</code> — replace this match, in its parent node, by the
+  given <code>content</code>.  <code>content</code> must be an array, or another <code>Match</code> object.
+</li>
+<li><code>swap(obj)</code> — exchange this match with the given <code>Match</code> object.  The
+  content of <code>obj</code> will be <code>this.content()</code>, and <code>this.content()</code> will be
+  the content of <code>obj</code>.
+</li>
+</ul>
+
+
+<p>
+In another example we're switching two named nodes:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [
+    <span class="org-string">"foo"</span>, <span class="org-string">"="</span>, 1,
+    <span class="org-string">"bar"</span>, <span class="org-string">"="</span>, 2,
+    <span class="org-string">"baz"</span>, <span class="org-string">"="</span>, 3
+];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"key"</span>),
+    <span class="org-string">"="</span>,
+    $.NAMED(<span class="org-string">"val"</span>)
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    m.key.swap(m.val);
+});
+console.log(a);
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">==&gt;</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">[ 1, '=', 'foo', 2, '=', 'bar', 3, '=', 'baz' ]</span>
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-10" class="outline-3">
+<h3 id="sec-2-10"><span class="section-number-3">2.10</span> Substructure matching </h3>
+<div class="outline-text-3" id="text-2-10">
+
+
+<p>
+So far we've seen that PatternJS can do on arrays what classical regular
+expressions can do on strings.  You might have noticed that we left out a
+certain feature of regexps—“character classes”.  That's the <code>[a-z]</code>
+operator.  It's because it doesn't make much sense here: while regexps
+operate on chars, PatternJS operates on elements of arbitrary types.
+</p>
+<p>
+In examples above the elements of the expression or of the array to search
+were strings or numbers.  There is one type which is treated specially:
+arrays.  Put simply, when an element of the search expression is an array,
+it gets compiled in a subexpression that must match an array at current
+position.  I'm not sure this explanation is clear, but an example should
+help:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">a</span> = [
+    1, 2, 3, <span class="org-comment-delimiter">// </span><span class="org-comment">noise</span>
+    [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, <span class="org-string">"c"</span> ] ],            <span class="org-comment-delimiter">// </span><span class="org-comment">**1</span>
+    [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, <span class="org-string">"e"</span> ] ],
+    [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, <span class="org-string">"d"</span>,                <span class="org-comment-delimiter">// </span><span class="org-comment">**2</span>
+             [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, <span class="org-string">"c"</span> ] ]    <span class="org-comment-delimiter">// </span><span class="org-comment">**3</span>
+           ] ]
+];
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(
+        <span class="org-string">"exp"</span>,
+        [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, $.OR(<span class="org-string">"c"</span>, <span class="org-string">"d"</span>) ] ]
+    )
+);
+$.search(a, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    console.log(m.exp.first());
+});
+</pre>
+
+
+<p>
+Note that this time the expression isn't flat anymore.  It's an array that
+starts with “a”, followed by an array that starts with “b” and continues
+with either “c” or “d”.  The algorithm matches it faithfully.  The output
+is:
+</p>
+
+
+
+<pre class="src src-js">[ <span class="org-string">'a'</span>, [ <span class="org-string">'b'</span>, <span class="org-string">'c'</span> ] ]
+[ <span class="org-string">'a'</span>, [ <span class="org-string">'b'</span>, <span class="org-string">'d'</span>, [ <span class="org-string">'a'</span>, [Object] ] ] ]
+[ <span class="org-string">'a'</span>, [ <span class="org-string">'b'</span>, <span class="org-string">'c'</span> ] ]
+</pre>
+
+
+<p>
+The matched parts are marked with ** above.  Note that it matched <code>["a", ["b", "d"...]]</code> even though there is stuff following the “d” in the
+haystack—this is by design: the expressions are not anchored at the right
+side.
+</p>
+<p>
+To force that the array finishes at the right side, you can use <code>END()</code>:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(
+        <span class="org-string">"exp"</span>,
+        [ <span class="org-string">"a"</span>, [ <span class="org-string">"b"</span>, $.OR(<span class="org-string">"c"</span>, <span class="org-string">"d"</span>), $.END() ] ]
+    )
+);
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">and the result with this is ==&gt;</span>
+[ <span class="org-string">'a'</span>, [ <span class="org-string">'b'</span>, <span class="org-string">'c'</span> ] ]
+[ <span class="org-string">'a'</span>, [ <span class="org-string">'b'</span>, <span class="org-string">'c'</span> ] ]
+</pre>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-3" class="outline-2">
+<h2 id="sec-3"><span class="section-number-2">3</span> UglifyJS AST examples </h2>
+<div class="outline-text-2" id="text-3">
+
+
+<p>
+Actually this was the reason why I started this library.
+UglifyJS<sup><a class="footref" name="fnr.4" href="#fn.4">4</a></sup> generates a complex AST to match the JavaScript
+program structure.  Here is an example:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-comment-delimiter">// </span><span class="org-comment">Program:</span>
+<span class="org-keyword">function</span> <span class="org-function-name">fact</span>(<span class="org-variable-name">n</span>) {
+        <span class="org-keyword">if</span> (n == 1) {
+                <span class="org-keyword">return</span> 1;
+        } <span class="org-keyword">else</span> {
+                <span class="org-keyword">return</span> n * fact(n - 1);
+        }
+}
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">AST:</span>
+[ <span class="org-string">'toplevel'</span>,
+  [ [ <span class="org-string">'defun'</span>,
+      <span class="org-string">'fact'</span>,
+      [ <span class="org-string">'n'</span> ],
+      [ [ <span class="org-string">'if'</span>,
+          [ <span class="org-string">'binary'</span>, <span class="org-string">'=='</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'n'</span> ], [ <span class="org-string">'num'</span>, 1 ] ],
+          [ <span class="org-string">'block'</span>, [ [ <span class="org-string">'return'</span>, [ <span class="org-string">'num'</span>, 1 ] ] ] ],
+          [ <span class="org-string">'block'</span>,
+            [ [ <span class="org-string">'return'</span>,
+                [ <span class="org-string">'binary'</span>,
+                  <span class="org-string">'*'</span>,
+                  [ <span class="org-string">'name'</span>, <span class="org-string">'n'</span> ],
+                  [ <span class="org-string">'call'</span>,
+                    [ <span class="org-string">'name'</span>, <span class="org-string">'fact'</span> ],
+                    [ [ <span class="org-string">'binary'</span>, <span class="org-string">'-'</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'n'</span> ], [ <span class="org-string">'num'</span>, 1 ] ] ]]]]]]]]]]]
+</pre>
+
+
+<p>
+We can observe a few things, for example:
+</p>
+<ul>
+<li>a function definition looks like: <code>[ 'defun', NAME, ARGS, BODY ]</code>, where
+  <code>NAME</code> is the function name, <code>ARGS</code> is an array of argument names, and
+  <code>BODY</code> is an array of statements that the function consists of; statements
+  in this array are full AST-s themselves;
+
+</li>
+<li>an <code>IF</code> statement looks like: <code>[ 'if', CONDITION, THEN, ELSE ]</code>; all the
+  arguments are AST-s themselves;
+
+</li>
+<li>a block of statements is <code>[ 'block', [ STATEMENT, STATEMENT, ... ]]</code>;
+
+</li>
+<li>a reference to a variable is <code>[ 'name', VARNAME ]</code>; etc.
+</li>
+</ul>
+
+
+<p>
+I thought having a powerful pattern engine would help simplify some things
+in UglifyJS, but it's not powerful enough yet.  UglifyJS provides extensive
+features for traversing and transforming the AST (its <code>ast_walker</code> API),
+that can also provide some intimate details like full parent list of the
+current node, variables in scope, etc.
+</p>
+<p>
+In any case, PatternJS can be used for various searches/transforms of an
+UglifyJS AST, and I'll provide some examples below.
+</p>
+
+</div>
+
+<div id="outline-container-3-1" class="outline-3">
+<h3 id="sec-3-1"><span class="section-number-3">3.1</span> Discard redundant block parens </h3>
+<div class="outline-text-3" id="text-3-1">
+
+
+<p>
+We could easily replace blocks that contain a single statement with the
+statement, therefore discarding the brackets:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">$</span> = require(<span class="org-string">"pattern"</span>);
+<span class="org-keyword">var</span> <span class="org-variable-name">U</span> = require(<span class="org-string">"uglify-js"</span>);
+<span class="org-keyword">var</span> <span class="org-variable-name">sys</span> = require(<span class="org-string">"util"</span>);
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">sample program (passed through the UglifyJS parser to get the AST)</span>
+<span class="org-keyword">var</span> <span class="org-variable-name">ast</span> = U.parser.parse(<span class="org-keyword">function</span> a(<span class="org-variable-name">foo</span>){
+    <span class="org-keyword">if</span> (foo) {
+        bar();
+    } <span class="org-keyword">else</span> {
+        baz();
+    }
+    <span class="org-keyword">if</span> (moo) {
+        foo();
+        bar();
+    }
+}.toString());
+
+console.log(sys.inspect(ast, <span class="org-constant">null</span>, <span class="org-constant">null</span>));
+
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.NAMED(<span class="org-string">"block"</span>,
+            [ <span class="org-string">"block"</span>, [
+                $.NAMED(<span class="org-string">"stat"</span>, $.ANYTHING()),
+                $.END()
+            ]])
+);
+$.search(ast, pat, <span class="org-keyword">function</span>(<span class="org-variable-name">m</span>){
+    m.block.replace(m.stat);
+});
+
+console.log(U.uglify.gen_code(ast, { beautify: <span class="org-constant">true</span> }));
+</pre>
+
+
+<p>
+The AST which is printed first is this:
+</p>
+
+
+
+<pre class="src src-js">[ <span class="org-string">'toplevel'</span>,
+  [ [ <span class="org-string">'defun'</span>,
+      <span class="org-string">'a'</span>,
+      [ <span class="org-string">'foo'</span> ],
+      [ [ <span class="org-string">'if'</span>,
+          [ <span class="org-string">'name'</span>, <span class="org-string">'foo'</span> ],
+          [ <span class="org-string">'block'</span>,   <span class="org-comment-delimiter">// </span><span class="org-comment">***</span>
+            [ [ <span class="org-string">'stat'</span>, [ <span class="org-string">'call'</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'bar'</span> ], [] ] ] ] ],
+          [ <span class="org-string">'block'</span>,   <span class="org-comment-delimiter">// </span><span class="org-comment">***</span>
+            [ [ <span class="org-string">'stat'</span>, [ <span class="org-string">'call'</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'baz'</span> ], [] ] ] ] ] ],
+        [ <span class="org-string">'if'</span>,
+          [ <span class="org-string">'name'</span>, <span class="org-string">'moo'</span> ],
+          [ <span class="org-string">'block'</span>,   <span class="org-comment-delimiter">// </span><span class="org-comment">this doesn't match as it has two statements</span>
+            [ [ <span class="org-string">'stat'</span>, [ <span class="org-string">'call'</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'foo'</span> ], [] ] ],
+              [ <span class="org-string">'stat'</span>, [ <span class="org-string">'call'</span>, [ <span class="org-string">'name'</span>, <span class="org-string">'bar'</span> ], [] ] ] ] ],
+          <span class="org-constant">undefined</span> ] ] ] ] ]
+</pre>
+
+
+<p>
+I marked with <code>***</code> the positions where the pattern will match.  The
+spurious block brackets are dropped and the output is:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">function</span> <span class="org-function-name">a</span>(<span class="org-variable-name">foo</span>) {
+    <span class="org-keyword">if</span> (foo) bar(); <span class="org-keyword">else</span> baz();
+    <span class="org-keyword">if</span> (moo) {
+        foo();
+        bar();
+    }
+}
+</pre>
+
+
+<p>
+This is one optimization that UglifyJS does with a lot more code.  But we
+should note that the pattern version is not safe—it should keep parens
+around <code>IF</code> statements without <code>ELSE</code>, that are themselves in an <code>IF</code> <i>with</i>
+an <code>ELSE</code>.  It's quite tricky to do with the pattern engine alone.
+</p>
+<p>
+We could extend it to store parent information and report it in the data
+object.
+</p>
+
+
+
+<pre class="src src-js">[ <span class="org-comment-delimiter">// </span><span class="org-comment">1</span>
+    <span class="org-string">"block"</span>,
+    [ <span class="org-comment-delimiter">// </span><span class="org-comment">2</span>
+        [ <span class="org-string">"stat"</span>, ... ] <span class="org-comment-delimiter">// </span><span class="org-comment">3</span>
+    ]
+]
+</pre>
+
+
+<p>
+In the above example, a generic pattern engine might note that the parent of
+the array 3 is the array 2.  But that's not the kind of information we're
+looking for—when dealing with UglifyJS trees we care to know that the
+parent of the statement is the block (thus, node 1).
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-3-2" class="outline-3">
+<h3 id="sec-3-2"><span class="section-number-3">3.2</span> Sample <code>IF</code> optimizations </h3>
+<div class="outline-text-3" id="text-3-2">
+
+
+<p>
+In the following sample we apply some small optimizations to <code>IF</code>
+statements:
+</p>
+<ul>
+<li>when there is a single statement in both of the branches, convert to
+  conditional;
+</li>
+<li>when the condition is <code>&lt;=</code> or <code>&gt;=</code>, reverse <code>THEN</code> with <code>ELSE</code> and change
+  the operator to <code>&gt;</code> or <code>&lt;</code>;
+</li>
+</ul>
+
+
+
+
+
+<pre class="src src-js"><span class="org-keyword">var</span> <span class="org-variable-name">$</span> = require(<span class="org-string">"pattern"</span>);
+<span class="org-keyword">var</span> <span class="org-variable-name">U</span> = require(<span class="org-string">"uglify-js"</span>);
+<span class="org-keyword">var</span> <span class="org-variable-name">sys</span> = require(<span class="org-string">"util"</span>);
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">sample program (passed through the UglifyJS parser to get the AST)</span>
+<span class="org-keyword">var</span> <span class="org-variable-name">ast</span> = U.parser.parse(<span class="org-keyword">function</span> a(<span class="org-variable-name">foo</span>){
+    <span class="org-keyword">if</span> (foo) {
+        bar();
+    } <span class="org-keyword">else</span> {
+        baz();
+    }
+    <span class="org-keyword">if</span> (moo) {
+        foo();
+        bar();
+    }
+    <span class="org-keyword">if</span> (a &lt;= b) {
+        f();
+    } <span class="org-keyword">else</span> {
+        g();
+    }
+}.toString());
+
+console.log(sys.inspect(ast, <span class="org-constant">null</span>, <span class="org-constant">null</span>));
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">helper function to be used with $.CHECK</span>
+<span class="org-keyword">function</span> <span class="org-function-name">NOT_NULL</span>(<span class="org-variable-name">val</span>){ <span class="org-keyword">return</span> val != <span class="org-constant">null</span> };
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">another helper: generate an expression that matches either one</span>
+<span class="org-comment-delimiter">// </span><span class="org-comment">statement or a block containing exactly one statement.</span>
+<span class="org-keyword">function</span> <span class="org-function-name">ONE_STATEMENT</span>(<span class="org-variable-name">name</span>) {
+    <span class="org-keyword">return</span> $.OR(
+        [ <span class="org-string">"stat"</span>, $.NAMED(name) ],
+        [ <span class="org-string">"block"</span>, [
+            [ <span class="org-string">"stat"</span>, $.NAMED(name) ],
+            $.END()
+        ]]
+    );
+};
+
+<span class="org-comment-delimiter">// </span><span class="org-comment">pattern definition</span>
+<span class="org-keyword">var</span> <span class="org-variable-name">pat</span> = $.compile(
+    $.OR(
+        <span class="org-comment-delimiter">// </span><span class="org-comment">this finds stuff like if (a&lt;=b) ... else ...</span>
+        [ <span class="org-string">"if"</span>, [ <span class="org-string">"binary"</span>,
+                  $.NAMED(<span class="org-string">"operator"</span>, $.OR(<span class="org-string">"&lt;="</span>, <span class="org-string">"&gt;="</span>)) ],
+          $.NAMED(<span class="org-string">"th"</span>, $.CHECK(NOT_NULL)),
+          $.NAMED(<span class="org-string">"el"</span>, $.CHECK(NOT_NULL)) ],
+
+        <span class="org-comment-delimiter">// </span><span class="org-comment">this finds IFs having exactly one statement on the branches</span>
+        $.NAMED(<span class="org-string">"to_conditional"</span>,
+                [ <span class="org-string">"if"</span>, $.NAMED(<span class="org-string">"co"</span>), ONE_STATEMENT(<span class="org-string">"th"</span>), ONE_STATEMENT(<span class="org-string">"el"</span>) ])
+
+    )
+);
+
+<span class="org-keyword">function</span> <span class="org-function-name">onmatch</span>(<span class="org-variable-name">m</span>) {
+    <span class="org-keyword">if</span> (m.operator) {
+        m.operator.replace([ m.operator.first() == <span class="org-string">"&lt;="</span> ? <span class="org-string">"&gt;"</span> : <span class="org-string">"&lt;"</span> ]);
+        m.th.swap(m.el);
+        <span class="org-keyword">return</span> m.$start; <span class="org-comment-delimiter">// </span><span class="org-comment">*** see below for an explanation of this</span>
+    }
+    <span class="org-keyword">if</span> (m.to_conditional) {
+        m.to_conditional.replace([
+            [ <span class="org-string">"stat"</span>,
+              [ <span class="org-string">"conditional"</span>, m.co.first(), m.th.first(), m.el.first() ]]
+        ]);
+    }
+}
+
+$.search(ast, pat, onmatch);
+
+console.log(U.uglify.gen_code(ast, { beautify: <span class="org-constant">true</span> }));
+</pre>
+
+
+<p>
+The output is:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">function</span> <span class="org-function-name">a</span>(<span class="org-variable-name">foo</span>) {
+    foo ? bar() : baz();
+    <span class="org-keyword">if</span> (moo) {
+        foo();
+        bar();
+    }
+    a &gt; b ? g() : f();
+}
+</pre>
+
+
+<p>
+With a relatively simple pattern and <code>onmatch</code> function we managed to do
+some non-trivial transformation to a piece of source code<sup><a class="footref" name="fnr.5" href="#fn.5">5</a></sup>.  Note that
+after handling the first expression in <code>onmatch</code> we <code>return $m.start</code>.  If
+you return anything from the function, it should be a number and it tells
+PatternJS where to continue the search.  By returning <code>m.$start</code> we tell it
+to re-run the expression at the same position where it found the match.
+Otherwise it would continue from <i>after</i> the expression, leaving the last
+<code>if</code> like this<sup><a class="footref" name="fnr.6" href="#fn.6">6</a></sup>:
+</p>
+
+
+
+<pre class="src src-js"><span class="org-keyword">if</span> (a &gt; b) {
+    g();
+} <span class="org-keyword">else</span> {
+    f();
+}
+</pre>
+
+
+
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-4" class="outline-2">
+<h2 id="sec-4"><span class="section-number-2">4</span> API reference </h2>
+<div class="outline-text-2" id="text-4">
+
+
+<p>
+This section won't be too useful if you didn't go through the examples.
+</p>
+<p>
+This package exports a few functions and combinators.  They are all
+available both in lower-case and in upper-case (note this doesn't mean
+they're case insensitive though).  I prefer to use upper-case for
+combinators inside expressions, and lower-case for the compile/search
+functions.
+</p>
+<ul>
+<li><code>compile(expr)</code> — to compile an expression into bytecode
+</li>
+<li><code>search(array, expr, onmatch)</code> — to search a compiled expression on an array
+</li>
+</ul>
+
+
+<p>
+Expression combinators:
+</p>
+<ul>
+<li><code>OR(case1, case2, ...)</code> — returns an expression that matches any of a few
+  alternate cases;
+
+</li>
+<li><code>MAYBE(expr, [expr, ...])</code> — returns an expression that matches <code>expr</code> if
+  found, but does not fail if not found;
+
+</li>
+<li><code>MANY(expr, [expr, ...])</code> — returns an expression that matches any number of
+  occurrences of <code>expr</code> (or zero occurrences);
+
+</li>
+<li><code>MORE(expr, [expr, ...])</code> — match at least one occurrence of <code>expr</code>;
+
+</li>
+<li><code>ANYTHING()</code> — match any expression;
+
+</li>
+<li><code>WHATEVER()</code> — equivalent to <code>MANY(ANYTHING())</code>;
+
+</li>
+<li><code>GROUP(expr, [expr, ...])</code> — returns a single expression that matches a
+  sequence of expressions;
+
+</li>
+<li><code>NAMED(name, expr, [expr, ...])</code> — like <code>GROUP</code> but gives the new
+  expression a name.  If you omit <code>expr</code> it defaults to <code>ANYTHING()</code>;
+
+</li>
+<li><code>REF(name)</code> — returns an expression that matches the same content as
+  matched previously by a <code>NAMED</code> group with name <code>name</code>;
+
+</li>
+<li><code>CHECK(predicate)</code> — matches the current expression if
+  <code>predicate(expression)</code> returns non-false;
+
+</li>
+<li><code>END()</code> — matches only at the end of the array;
+
+</li>
+<li><code>MANYNG</code>, <code>MORENG</code>, <code>MAYBENG</code>, <code>WHATEVERNG</code> — the non-greedy versions for
+  combinators involving backtracking.
+</li>
+</ul>
+
+
+<p>
+Above when I wrote <code>expr, [expr, ...]</code> I meant to say that those functions
+take multiple arguments.  The following lines don't match the same
+expressions:
+</p>
+
+
+
+<pre class="src src-js">GROUP(<span class="org-string">"a"</span>, <span class="org-string">"b"</span>, <span class="org-string">"c"</span>);
+GROUP([ <span class="org-string">"a"</span>, <span class="org-string">"b"</span>, <span class="org-string">"c"</span> ]);
+</pre>
+
+
+<p>
+I tried to stress this in some examples.  The first one matches the sequence
+anywhere, while the second one asserts that the sequence is at the start of
+an array.
+</p>
+
+</div>
+
+<div id="outline-container-4-1" class="outline-3">
+<h3 id="sec-4-1"><span class="section-number-3">4.1</span> The <code>onmatch</code> function </h3>
+<div class="outline-text-3" id="text-4-1">
+
+
+<p>
+The function you pass to <code>search()</code> recevies one parameter, let's call it
+<code>m</code>, that can be used to figure out various things about the match:
+</p>
+<ul>
+<li><code>m.$node</code> — the array where the current match is found;
+</li>
+<li><code>m.$start</code> — the index in <code>$node</code> where the current match is found;
+</li>
+<li><code>m.$end</code> — the index where the match ends;
+</li>
+<li><code>m.$match()</code> — returns the current match as a <code>Match</code> object (see below);
+</li>
+<li>additionally, <code>NAMED</code> expressions insert properties into this object.
+</li>
+</ul>
+
+
+<p>
+This function may modify $node.  Some helper API is provided for this by
+<code>Match</code> objects.  If it returns anything, it must be a valid index in
+<code>$node</code>, and searching will continue at that position.  Without a return
+value, the algorithm continues searching <b>after</b> the current match.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-4-2" class="outline-3">
+<h3 id="sec-4-2"><span class="section-number-3">4.2</span> The <code>Match</code> objects </h3>
+<div class="outline-text-3" id="text-4-2">
+
+
+<p>
+They have the following methods:
+</p>
+<ul>
+<li><code>replace(content)</code> — replaces the current node with the given <code>content</code>
+  (which may be an array or a <code>Match</code> object);
+</li>
+<li><code>swap(node)</code> — swap two <code>Match</code> objects — meaning that the content of one
+  replaces the content of the other in the original tree;
+</li>
+<li><code>content()</code> — returns the content that this node matches, as an array;
+</li>
+<li><code>first()</code> — returns the first node in the content; same as <code>content()[0]</code>.
+</li>
+</ul>
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-5" class="outline-2">
+<h2 id="sec-5"><span class="section-number-2">5</span> License </h2>
+<div class="outline-text-2" id="text-5">
+
+
+<p>
+Copyright 2011 (c) Mihai Bazon &lt;mihai.bazon@gmail.com&gt;
+</p>
+<p>
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+</p>
+<ul>
+<li>Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+
+</li>
+<li>Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+</li>
+</ul>
+
+
+<p>
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER “AS IS” AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+</p>
+<div id="footnotes">
+<h2 class="footnotes">Footnotes: </h2>
+<div id="text-footnotes">
+<p class="footnote"><sup><a class="footnum" name="fn.1" href="#fnr.1">1</a></sup> <a href="http://swtch.com/~rsc/regexp/regexp2.html">http://swtch.com/~rsc/regexp/regexp2.html</a>
+</p>
+
+<p class="footnote"><sup><a class="footnum" name="fn.2" href="#fnr.2">2</a></sup> Russ's article provides many optimization hints; for now, my
+implementation is the just simplest recursive version.
+</p>
+
+<p class="footnote"><sup><a class="footnum" name="fn.3" href="#fnr.3">3</a></sup> I've nothing to do with the fact that “anything” ends in “ng”
+though. ;-)
+</p>
+
+<p class="footnote"><sup><a class="footnum" name="fn.4" href="#fnr.4">4</a></sup> <a href="https://github.com/mishoo/UglifyJS">https://github.com/mishoo/UglifyJS</a> — a JavaScript
+parser/compressor toolkit
+</p>
+
+<p class="footnote"><sup><a class="footnum" name="fn.5" href="#fnr.5">5</a></sup> well, also thanks to the parser and code generator provided by
+UglifyJS.
+</p>
+
+<p class="footnote"><sup><a class="footnum" name="fn.6" href="#fnr.6">6</a></sup> for obvious reasons, since the second part of the regexp never had a
+chance to run.
+</p></div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div id="postamble">
+<p class="date">Date: 2011-09-18 17:49:45 EEST</p>
+<p class="author">Author: Mihai Bazon</p>
+<p class="creator">Org version 7.7 with Emacs version 23</p>
+<a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
+
+</div>
+</body>
+</html>

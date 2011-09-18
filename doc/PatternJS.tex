@@ -1,0 +1,1028 @@
+% Created 2011-09-18 Sun 17:49
+\documentclass[a4paper,10pt]{article}
+\usepackage{fontspec}
+\usepackage{xltxtra}
+\usepackage{xunicode}
+\usepackage{fixltx2e}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{soul}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{latexsym}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\tolerance=1000
+\usepackage{minted}
+\setmonofont{Inconsolata}
+\setmainfont{Linux Libertine O}
+\providecommand{\alert}[1]{\textbf{#1}}
+
+\title{PatternJS — regular expressions for trees}
+\author{Mihai Bazon}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\setcounter{tocdepth}{3}
+\tableofcontents
+\vspace*{1cm}
+
+\section{pattern.js -- regular expressions for trees}
+\label{sec-1}
+
+
+This is an implementation of a pattern matching engine similar in power to
+regular expressions but applicable to trees (array of arrays, in this case)
+rather than strings.
+
+Based on ideas in an excellent paper by Russ Cox\footnote{\href{http://swtch.com/~rsc/regexp/regexp2.html}{http://swtch.com/\~rsc/regexp/regexp2.html} }, we compile search
+queries to a home-made bytecode and provide a specialized VM to run the
+bytecode.  The VM can only say if a tree matches a query or not; to search,
+we apply the query to all the subtrees.  Speed was not a goal for my
+implementation\footnote{Russ's article provides many optimization hints; for now, my
+implementation is the just simplest recursive version. }, but it's pretty fast by my tests.
+\section{Syntax by examples}
+\label{sec-2}
+
+
+This library is useful when you need to search something in an array and the
+search is more complicated than what indexOf can handle.  In other words,
+when the search is even moderately complex, you need this tool.
+
+For example, suppose you're looking for the sequence 3, 4, 5 in the
+following array:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+[ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+\end{minted}
+
+You would like to know at which index it starts.  You'll usually need to
+know where it ends too, but this is a simple expression that doesn't involve
+repetitions, so the end index is trivial to get—it's \texttt{START + LENGTH}.
+
+With PatternJS we can use the following code:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var $ = require("pattern");
+var haystack = [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ];
+var needle = $.compile(3, 4, 5);
+$.search(haystack, needle, function onmatch(m){
+    console.log(m.$node);              // == haystack in this case
+    console.log(m.$start);             // 2
+    console.log(m.$end);               // 5
+    console.log(m.$match().content()); // [ 3, 4, 5 ]
+});
+\end{minted}
+
+The above code shows the basic API to this library.  It exports two main
+functions: \texttt{compile} and \texttt{search}.  The first takes a search query and
+returns the compiled bytecode.  The \texttt{search} function takes the array to
+search, the bytecode to run, and an “onmatch” function.  This function takes
+a single argument that contains various information about the match.  Above
+I showed the following 4 properties:
+
+\begin{itemize}
+\item \texttt{\$node} — the node that matched
+\item \texttt{\$start} — the position where match starts
+\item \texttt{\$end} — the position where the match ends
+\item \texttt{\$match} — this returns a \texttt{Match} object.  I'll describe them later.  For
+  now you can notice that it has a content() method, which returns the node
+  content.  In the case above, \texttt{\$match().content()} is the same as
+  \texttt{\$node.slice(\$start, \$end)}.
+\end{itemize}
+\subsection{Repetition (\texttt{MANY}, \texttt{MORE})}
+\label{sec-2-1}
+
+
+The above example is already a bit more than \texttt{indexOf} can handle, but as
+promised, this library is as powerful as regular expressions.  Here's how we
+can handle repetition.  Suppose we want to find blocks of one or more “a”-s
+in an array:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, "a", 3, 4, "a", "a", "a", "b", "a", "a", "c" ];
+var pat = $.compile($.MORE("a"));
+$.search(a, pat, function(m){
+    // log where it starts, where it ends, and contents
+    console.log(m.$start, m.$end, m.$match().content());
+});
+\end{minted}
+
+We get the following output:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+2 3 [ 'a' ]
+5 8 [ 'a', 'a', 'a' ]
+9 11 [ 'a', 'a' ]
+\end{minted}
+
+We can also search for repetitive expressions consisting of more than one
+node.  For example, finding consecutive occurrences of 2, 3, 4 in an array:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 5 ];
+var pat = $.compile($.MORE(2, 3, 4));
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+// ==> 1 13 [ 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4 ]
+\end{minted}
+
+That's right, there's a single contiguous match—the sequence 2, 3, 4 is
+repeated 4 times, starting at index 1 and ending at index 13.
+
+\texttt{MORE} is in fact the equivalent of \texttt{+} in ordinary regexps.  It matches its
+argument at least once.  There is also a \texttt{MANY} combinator which is like \texttt{*}
+in regexps—it matches the argument zero or more times:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 2, 4, 4, 4, 1, 2, 4, 0, 2, 0, 1 ];
+var pat = $.compile(2, $.MANY(4));
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+\end{minted}
+
+The above matches a 2 followed by zero or more 4-s.  It outputs:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+1 2 [ 2 ]
+3 7 [ 2, 4, 4, 4 ]
+8 10 [ 2, 4 ]
+11 12 [ 2 ]
+\end{minted}
+\subsection{Wildcard (\texttt{ANYTHING}, \texttt{WHATEVER})}
+\label{sec-2-2}
+
+
+Ordinary regexps provide an easy way to match “anything”—via a single dot
+character.  Or to match a sequence of consecutive “anything”-s (which we
+call “whatever”), you would use \texttt{.*}.  PatternJS provides similar features,
+here are quick examples:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+// match any sequence of type 2, X, 4
+var a = [ 1, 2, 3, 4, 2, 4, 2, 1, 4, 5 ];
+var pat = $.compile(2, $.ANYTHING(), 4);
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+\end{minted}
+
+outputs:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+1 4 [ 2, 3, 4 ]
+6 9 [ 2, 1, 4 ]
+\end{minted}
+\subsection{Greedy and non-greedy repetitions (\texttt{NG} suffix)}
+\label{sec-2-3}
+
+
+A similar example with \texttt{WHATEVER}:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 4, 2, 4, 2, 1, "a", "b", 4, 5 ];
+var pat = $.compile(2, $.WHATEVER(), 4);
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+\end{minted}
+
+The output is interesting:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+1 11 [ 2, 3, 4, 2, 4, 2, 1, 'a', 'b', 4 ]
+\end{minted}
+
+Similar to ordinary regexps, the \texttt{MANY} and \texttt{MORE} constructs are “greedy”.
+They match as many characters as possible.  For this reason, because the
+expression that we're looking for is “2 followed by whatever sequence
+followed by 4” it matches from the first 2 in the array to the last 4.
+
+There are cases, like the above, when we want the repetitive constructs to
+be “non-greedy”.  We provide \texttt{MANYNG}, \texttt{MORENG} and \texttt{WHATEVERNG} combinators
+for this case.  By the way, \texttt{WHATEVER()} is equivalent to
+\texttt{MANY(ANYTHING())}, and \texttt{WHATEVERNG()} is equivalent to
+\texttt{MANYNG(ANYTHING())}\footnote{I've nothing to do with the fact that “anything” ends in “ng”
+though. ;-) }.
+
+The non-greedy pattern in the above example would be:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var pat = $.compile(2, $.WHATEVERNG(), 4);
+\end{minted}
+
+and the output:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+1 4 [ 2, 3, 4 ]
+4 6 [ 2, 4 ]
+6 11 [ 2, 1, 'a', 'b', 4 ]
+\end{minted}
+\subsection{To be or not to be (\texttt{MAYBE})}
+\label{sec-2-4}
+
+
+In ordinary regexps this is provided by the question-mark operator; in
+PatternJS it's called \texttt{MAYBE}.  Here's an example that matches sequences of
+“a”, “b”, optionally separated by a dash:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, "a", "b", 3, "a", "x", "b", "a", "-", "b", 3, "a", "b" ];
+var pat = $.compile("a", $.MAYBE("-"), "b");
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+// ==>
+// 2 4 [ 'a', 'b' ]
+// 8 11 [ 'a', '-', 'b' ]
+// 12 14 [ 'a', 'b' ]
+\end{minted}
+\subsection{Alternatives (\texttt{OR})}
+\label{sec-2-5}
+
+
+You can use \texttt{OR} to provide alternatives at a certain point.  Example: match
+consecutive sequences of 1, 2, or 3:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 3, 2, 1, 4, 5, 6, 2 ];
+var pat = $.compile($.MORE($.OR(1, 2, 3)));
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+// ==>
+// 0 3 [ 1, 2, 3 ]
+// 9 12 [ 3, 2, 1 ]
+// 15 16 [ 2 ]
+\end{minted}
+
+Note that \texttt{OR} takes multiple “atoms” and returns a combinator that matches
+any of them.  Passing that to \texttt{MORE}, I got a combinator that matches a
+sequence of 1, 2 or 3.  In a regexp you would do “(1|2|3)+”.  Because \texttt{OR}
+returns a single expression, there's an implicit grouping above.
+
+How would you devise an expression matching “a”, “b” OR “c”, “d” (that is,
+either an “a” followed by a “b”, or a “c” followed by a “d”).  You would
+need one of the combinators in the next section.
+\subsection{Grouping expressions (\texttt{NAMED}, \texttt{GROUP})}
+\label{sec-2-6}
+
+
+In ordinary regexps you can group sub-expressions with parens.  That serves
+two purposes: firstly it can limit action of other operations to only a part
+of the expression, as in \texttt{a(foo|bar)b} — without the parens, the pipe would
+pick between \texttt{afoo} and \texttt{barb}; and secondly, you can reference those groups
+after a match using a convenient shortcut.  In Perl for example, you can
+access each group with \texttt{\$1}, \texttt{\$2} etc. (a \texttt{\$} followed by the group index).
+
+\texttt{GROUP} takes any number of expressions and matches when those expressions
+are found in sequence.  It's the solution to the last question in the
+previous section.  To match either “a” followed by “b”, or “c” followed by
+“d”:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, "a", 3, "c", "d", 4, "a", "b", 5, "c", "e" ];
+var pat = $.compile($.OR($.GROUP("a", "b"),
+                         $.GROUP("c", "d")));
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+});
+
+// ==>
+// 4 6 [ 'c', 'd' ]
+// 7 9 [ 'a', 'b' ]
+\end{minted}
+
+\texttt{NAMED} is like \texttt{GROUP}, but the first argument must be a name by which you
+want to access the match later.  For example:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [
+    "foo", "=", 1,
+    "bar", "=", 2,
+    "baz", "=", 3
+];
+var pat = $.compile(
+    $.NAMED("key", $.ANYTHING()),
+    "=",
+    $.NAMED("val") // missing expression implies $.ANYTHING()
+);
+$.search(a, pat, function(m){
+    console.log(m.key.content(), m.val.content());
+});
+\end{minted}
+
+outputs:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+[ 'foo' ] [ 1 ]
+[ 'bar' ] [ 2 ]
+[ 'baz' ] [ 3 ]
+\end{minted}
+
+The actual pattern to search for is \texttt{ANYTHING} = \texttt{ANYTHING}.  (the second
+one is \texttt{\$.NAMED("val")}, but lacking any expression, \texttt{ANYTHING()} is
+implied).
+
+The first \texttt{ANYTHING} is being assigned the name “key”, and the second one
+“val”.  As you can see, on a successful match they become properties of the
+data object “m”.  Those properties are \texttt{Match} objects and they provide some
+useful methods, one of which is \texttt{content()}, which simply returns all the
+matched content.  As you can see above, \texttt{content()} returns an array—because
+expressions can generally match multiple elements.
+
+Here's another example to make this more obvious:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [
+    "foo", "=", 1,
+    "bar", "=", 2,
+    "baz", "=", 3
+];
+var pat = $.compile(
+    $.NAMED("def", $.ANYTHING(), "=", $.ANYTHING())
+);
+$.search(a, pat, function(m){
+    console.log(m.def.content());
+});
+
+// ==>
+// [ 'foo', '=', 1 ]
+// [ 'bar', '=', 2 ]
+// [ 'baz', '=', 3 ]
+\end{minted}
+
+As you can see, \texttt{NAMED} can take more than two arguments—anything
+following the name is part of the searched expression.  \texttt{content()} returns
+the three of them this time.
+
+When you are only interested in the first element of the \texttt{content()} array,
+you can use \texttt{first()} as a shortcut for \texttt{content()[0]}.  There is more to be
+said about \texttt{Match} objects, as you'll see below.
+\subsection{\texttt{MAYBE} ambiguity?}
+\label{sec-2-7}
+
+
+\texttt{NAMED} introduces a funny question when used in conjunction with the
+\texttt{MAYBE} combinator.  What does the following output:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ "a", "b", "b", "b", "c" ];
+var pat = $.compile("a", $.MAYBE("b"), "b", $.NAMED("f", $.MORE("b"), "c"));
+$.search(a, pat, function(m){
+    console.log(m.f.content());
+});
+\end{minted}
+
+Well, it outputs \texttt{[ 'b', 'c' ]}, because even the \texttt{MAYBE} operator is
+greedy!  Being so, it takes as many characters as possible.  The first part
+of the expression could have matched only \texttt{[ 'a', 'b' ]}, instead of \texttt{[ 'a', 'b', 'b' ]}, but the greedy-ish nature of \texttt{MAYBE} made it take all it could.
+
+For this reason, even though it seems seldom useful, there is a non-greedy
+version of \texttt{MAYBE}, which, of course, it's called \texttt{MAYBENG}.  With the
+following pattern the result is different:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+pat = $.compile("a", $.MAYBENG("b"), "b", $.NAMED("f", $.MORE("b"), "c"));
+// ==> [ 'b', 'b', 'c' ]
+\end{minted}
+\subsection{Back references (\texttt{REF})}
+\label{sec-2-8}
+
+
+Once you gave a name to a sub-expression, you can refer to it in the search
+query.  This part is commonly \texttt{\textbackslash{}N} in regular expressions (where \texttt{N} is the
+index of the parenthesized group).
+
+In PatternJS it's \texttt{REF("name")}.  For a quick example, let's try to find all
+sequences of elements that repeat two or more times:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 3, 3, 2, 2, 1, 2, 1, 1, 1, 1, 1, 2, 3, 3 ];
+var pat = $.compile(
+    $.NAMED("a", $.ANYTHING()),
+    $.MORE(
+        $.REF("a")
+    )
+);
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+    console.log("    A =", m.a.content());
+});
+\end{minted}
+
+The output is:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+2 5 [ 3, 3, 3 ]
+    A = [ 3 ]
+5 7 [ 2, 2 ]
+    A = [ 2 ]
+9 14 [ 1, 1, 1, 1, 1 ]
+    A = [ 1 ]
+15 17 [ 3, 3 ]
+    A = [ 3 ]
+\end{minted}
+
+So the expression is:
+
+\begin{enumerate}
+\item accept \emph{anything}, and \emph{name} it “a”
+\item accept one or \emph{more} occurrences of what “a” matched.
+\end{enumerate}
+
+Note that because \texttt{NAMED} takes any arbitrary expression, \texttt{REF} in turn is
+able to refer back to an arbitrarily complex match.  It needs not be a
+simple literal:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [
+    1, 2, 3, // noise
+    "a", "+", 1,
+    4, 5, 6, // noise
+    "a", "+", 1,
+    "foo", "bar"
+];
+var pat = $.compile(
+    $.NAMED("a", $.ANYTHING(), "+", $.ANYTHING()),
+    $.WHATEVER(),
+    $.REF("a")
+);
+$.search(a, pat, function(m){
+    console.log(m.$start, m.$end, m.$match().content());
+    console.log("    A =", m.a.content());
+});
+\end{minted}
+
+==>
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+3 12 [ 'a', '+', 1, 4, 5, 6, 'a', '+', 1 ]
+    A = [ 'a', '+', 1 ]
+\end{minted}
+\subsection{Replace nodes}
+\label{sec-2-9}
+
+
+One common feature of regular expression engines is the ability to replace
+either entirely, or partially, the matched expression with something else.
+PatternJS provides some features to help with that.
+
+Here's the most basic sample:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [ 1, 2, 3, 4, 5 ];
+var pat = $.compile(
+    2, 3, 4
+);
+$.search(a, pat, function(m){
+    m.$match().replace([ "cut" ]);
+});
+console.log(a);
+
+// ==>
+// [ 1, 'cut', 5 ]
+\end{minted}
+
+More generally, a \texttt{Match} node has the following methods:
+
+\begin{itemize}
+\item \texttt{content()} — which you already saw: it returns an array with the
+  elements matched by this sub-expression.
+\item \texttt{first()} — equivalent to \texttt{content()[0]}
+\item \texttt{replace(content)} — replace this match, in its parent node, by the
+  given \texttt{content}.  \texttt{content} must be an array, or another \texttt{Match} object.
+\item \texttt{swap(obj)} — exchange this match with the given \texttt{Match} object.  The
+  content of \texttt{obj} will be \texttt{this.content()}, and \texttt{this.content()} will be
+  the content of \texttt{obj}.
+\end{itemize}
+
+In another example we're switching two named nodes:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [
+    "foo", "=", 1,
+    "bar", "=", 2,
+    "baz", "=", 3
+];
+var pat = $.compile(
+    $.NAMED("key"),
+    "=",
+    $.NAMED("val")
+);
+$.search(a, pat, function(m){
+    m.key.swap(m.val);
+});
+console.log(a);
+
+// ==>
+// [ 1, '=', 'foo', 2, '=', 'bar', 3, '=', 'baz' ]
+\end{minted}
+\subsection{Substructure matching}
+\label{sec-2-10}
+
+
+So far we've seen that PatternJS can do on arrays what classical regular
+expressions can do on strings.  You might have noticed that we left out a
+certain feature of regexps—“character classes”.  That's the \texttt{[a-z]}
+operator.  It's because it doesn't make much sense here: while regexps
+operate on chars, PatternJS operates on elements of arbitrary types.
+
+In examples above the elements of the expression or of the array to search
+were strings or numbers.  There is one type which is treated specially:
+arrays.  Put simply, when an element of the search expression is an array,
+it gets compiled in a subexpression that must match an array at current
+position.  I'm not sure this explanation is clear, but an example should
+help:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var a = [
+    1, 2, 3, // noise
+    [ "a", [ "b", "c" ] ],            // **1
+    [ "a", [ "b", "e" ] ],
+    [ "a", [ "b", "d",                // **2
+             [ "a", [ "b", "c" ] ]    // **3
+           ] ]
+];
+var pat = $.compile(
+    $.NAMED(
+        "exp",
+        [ "a", [ "b", $.OR("c", "d") ] ]
+    )
+);
+$.search(a, pat, function(m){
+    console.log(m.exp.first());
+});
+\end{minted}
+
+Note that this time the expression isn't flat anymore.  It's an array that
+starts with “a”, followed by an array that starts with “b” and continues
+with either “c” or “d”.  The algorithm matches it faithfully.  The output
+is:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+[ 'a', [ 'b', 'c' ] ]
+[ 'a', [ 'b', 'd', [ 'a', [Object] ] ] ]
+[ 'a', [ 'b', 'c' ] ]
+\end{minted}
+
+The matched parts are marked with ** above.  Note that it matched \texttt{["a", ["b", "d"...]]} even though there is stuff following the “d” in the
+haystack—this is by design: the expressions are not anchored at the right
+side.
+
+To force that the array finishes at the right side, you can use \texttt{END()}:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var pat = $.compile(
+    $.NAMED(
+        "exp",
+        [ "a", [ "b", $.OR("c", "d"), $.END() ] ]
+    )
+);
+
+// and the result with this is ==>
+[ 'a', [ 'b', 'c' ] ]
+[ 'a', [ 'b', 'c' ] ]
+\end{minted}
+\section{UglifyJS AST examples}
+\label{sec-3}
+
+
+Actually this was the reason why I started this library.
+UglifyJS\footnote{\href{https://github.com/mishoo/UglifyJS}{https://github.com/mishoo/UglifyJS} — a JavaScript
+parser/compressor toolkit } generates a complex AST to match the JavaScript
+program structure.  Here is an example:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+// Program:
+function fact(n) {
+        if (n == 1) {
+                return 1;
+        } else {
+                return n * fact(n - 1);
+        }
+}
+
+// AST:
+[ 'toplevel',
+  [ [ 'defun',
+      'fact',
+      [ 'n' ],
+      [ [ 'if',
+          [ 'binary', '==', [ 'name', 'n' ], [ 'num', 1 ] ],
+          [ 'block', [ [ 'return', [ 'num', 1 ] ] ] ],
+          [ 'block',
+            [ [ 'return',
+                [ 'binary',
+                  '*',
+                  [ 'name', 'n' ],
+                  [ 'call',
+                    [ 'name', 'fact' ],
+                    [ [ 'binary', '-', [ 'name', 'n' ], [ 'num', 1 ] ] ]]]]]]]]]]]
+\end{minted}
+
+We can observe a few things, for example:
+
+\begin{itemize}
+\item a function definition looks like: \texttt{[ 'defun', NAME, ARGS, BODY ]}, where
+  \texttt{NAME} is the function name, \texttt{ARGS} is an array of argument names, and
+  \texttt{BODY} is an array of statements that the function consists of; statements
+  in this array are full AST-s themselves;
+\item an \texttt{IF} statement looks like: \texttt{[ 'if', CONDITION, THEN, ELSE ]}; all the
+  arguments are AST-s themselves;
+\item a block of statements is \texttt{[ 'block', [ STATEMENT, STATEMENT, ... ]]};
+\item a reference to a variable is \texttt{[ 'name', VARNAME ]}; etc.
+\end{itemize}
+
+I thought having a powerful pattern engine would help simplify some things
+in UglifyJS, but it's not powerful enough yet.  UglifyJS provides extensive
+features for traversing and transforming the AST (its \texttt{ast\_walker} API),
+that can also provide some intimate details like full parent list of the
+current node, variables in scope, etc.
+
+In any case, PatternJS can be used for various searches/transforms of an
+UglifyJS AST, and I'll provide some examples below.
+\subsection{Discard redundant block parens}
+\label{sec-3-1}
+
+
+We could easily replace blocks that contain a single statement with the
+statement, therefore discarding the brackets:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var $ = require("pattern");
+var U = require("uglify-js");
+var sys = require("util");
+
+// sample program (passed through the UglifyJS parser to get the AST)
+var ast = U.parser.parse(function a(foo){
+    if (foo) {
+        bar();
+    } else {
+        baz();
+    }
+    if (moo) {
+        foo();
+        bar();
+    }
+}.toString());
+
+console.log(sys.inspect(ast, null, null));
+
+var pat = $.compile(
+    $.NAMED("block",
+            [ "block", [
+                $.NAMED("stat", $.ANYTHING()),
+                $.END()
+            ]])
+);
+$.search(ast, pat, function(m){
+    m.block.replace(m.stat);
+});
+
+console.log(U.uglify.gen_code(ast, { beautify: true }));
+\end{minted}
+
+The AST which is printed first is this:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+[ 'toplevel',
+  [ [ 'defun',
+      'a',
+      [ 'foo' ],
+      [ [ 'if',
+          [ 'name', 'foo' ],
+          [ 'block',   // ***
+            [ [ 'stat', [ 'call', [ 'name', 'bar' ], [] ] ] ] ],
+          [ 'block',   // ***
+            [ [ 'stat', [ 'call', [ 'name', 'baz' ], [] ] ] ] ] ],
+        [ 'if',
+          [ 'name', 'moo' ],
+          [ 'block',   // this doesn't match as it has two statements
+            [ [ 'stat', [ 'call', [ 'name', 'foo' ], [] ] ],
+              [ 'stat', [ 'call', [ 'name', 'bar' ], [] ] ] ] ],
+          undefined ] ] ] ] ]
+\end{minted}
+
+I marked with \texttt{***} the positions where the pattern will match.  The
+spurious block brackets are dropped and the output is:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+function a(foo) {
+    if (foo) bar(); else baz();
+    if (moo) {
+        foo();
+        bar();
+    }
+}
+\end{minted}
+
+This is one optimization that UglifyJS does with a lot more code.  But we
+should note that the pattern version is not safe—it should keep parens
+around \texttt{IF} statements without \texttt{ELSE}, that are themselves in an \texttt{IF} \emph{with}
+an \texttt{ELSE}.  It's quite tricky to do with the pattern engine alone.
+
+We could extend it to store parent information and report it in the data
+object.
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+[ // 1
+    "block",
+    [ // 2
+        [ "stat", ... ] // 3
+    ]
+]
+\end{minted}
+
+In the above example, a generic pattern engine might note that the parent of
+the array 3 is the array 2.  But that's not the kind of information we're
+looking for—when dealing with UglifyJS trees we care to know that the
+parent of the statement is the block (thus, node 1).
+\subsection{Sample \texttt{IF} optimizations}
+\label{sec-3-2}
+
+
+In the following sample we apply some small optimizations to \texttt{IF}
+statements:
+
+\begin{itemize}
+\item when there is a single statement in both of the branches, convert to
+  conditional;
+\item when the condition is \texttt{<=} or \texttt{>=}, reverse \texttt{THEN} with \texttt{ELSE} and change
+  the operator to \texttt{>} or \texttt{<};
+\end{itemize}
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+var $ = require("pattern");
+var U = require("uglify-js");
+var sys = require("util");
+
+// sample program (passed through the UglifyJS parser to get the AST)
+var ast = U.parser.parse(function a(foo){
+    if (foo) {
+        bar();
+    } else {
+        baz();
+    }
+    if (moo) {
+        foo();
+        bar();
+    }
+    if (a <= b) {
+        f();
+    } else {
+        g();
+    }
+}.toString());
+
+console.log(sys.inspect(ast, null, null));
+
+// helper function to be used with $.CHECK
+function NOT_NULL(val){ return val != null };
+
+// another helper: generate an expression that matches either one
+// statement or a block containing exactly one statement.
+function ONE_STATEMENT(name) {
+    return $.OR(
+        [ "stat", $.NAMED(name) ],
+        [ "block", [
+            [ "stat", $.NAMED(name) ],
+            $.END()
+        ]]
+    );
+};
+
+// pattern definition
+var pat = $.compile(
+    $.OR(
+        // this finds stuff like if (a<=b) ... else ...
+        [ "if", [ "binary",
+                  $.NAMED("operator", $.OR("<=", ">=")) ],
+          $.NAMED("th", $.CHECK(NOT_NULL)),
+          $.NAMED("el", $.CHECK(NOT_NULL)) ],
+
+        // this finds IFs having exactly one statement on the branches
+        $.NAMED("to_conditional",
+                [ "if", $.NAMED("co"), ONE_STATEMENT("th"), ONE_STATEMENT("el") ])
+
+    )
+);
+
+function onmatch(m) {
+    if (m.operator) {
+        m.operator.replace([ m.operator.first() == "<=" ? ">" : "<" ]);
+        m.th.swap(m.el);
+        return m.$start; // *** see below for an explanation of this
+    }
+    if (m.to_conditional) {
+        m.to_conditional.replace([
+            [ "stat",
+              [ "conditional", m.co.first(), m.th.first(), m.el.first() ]]
+        ]);
+    }
+}
+
+$.search(ast, pat, onmatch);
+
+console.log(U.uglify.gen_code(ast, { beautify: true }));
+\end{minted}
+
+The output is:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+function a(foo) {
+    foo ? bar() : baz();
+    if (moo) {
+        foo();
+        bar();
+    }
+    a > b ? g() : f();
+}
+\end{minted}
+
+With a relatively simple pattern and \texttt{onmatch} function we managed to do
+some non-trivial transformation to a piece of source code\footnote{well, also thanks to the parser and code generator provided by
+UglifyJS. }.  Note that
+after handling the first expression in \texttt{onmatch} we \texttt{return \$m.start}.  If
+you return anything from the function, it should be a number and it tells
+PatternJS where to continue the search.  By returning \texttt{m.\$start} we tell it
+to re-run the expression at the same position where it found the match.
+Otherwise it would continue from \emph{after} the expression, leaving the last
+\texttt{if} like this\footnote{for obvious reasons, since the second part of the regexp never had a
+chance to run. }:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+if (a > b) {
+    g();
+} else {
+    f();
+}
+\end{minted}
+\section{API reference}
+\label{sec-4}
+
+
+This section won't be too useful if you didn't go through the examples.
+
+This package exports a few functions and combinators.  They are all
+available both in lower-case and in upper-case (note this doesn't mean
+they're case insensitive though).  I prefer to use upper-case for
+combinators inside expressions, and lower-case for the compile/search
+functions.
+
+\begin{itemize}
+\item \texttt{compile(expr)} — to compile an expression into bytecode
+\item \texttt{search(array, expr, onmatch)} — to search a compiled expression on an array
+\end{itemize}
+
+Expression combinators:
+
+\begin{itemize}
+\item \texttt{OR(case1, case2, ...)} — returns an expression that matches any of a few
+  alternate cases;
+\item \texttt{MAYBE(expr, [expr, ...])} — returns an expression that matches \texttt{expr} if
+  found, but does not fail if not found;
+\item \texttt{MANY(expr, [expr, ...])} — returns an expression that matches any number of
+  occurrences of \texttt{expr} (or zero occurrences);
+\item \texttt{MORE(expr, [expr, ...])} — match at least one occurrence of \texttt{expr};
+\item \texttt{ANYTHING()} — match any expression;
+\item \texttt{WHATEVER()} — equivalent to \texttt{MANY(ANYTHING())};
+\item \texttt{GROUP(expr, [expr, ...])} — returns a single expression that matches a
+  sequence of expressions;
+\item \texttt{NAMED(name, expr, [expr, ...])} — like \texttt{GROUP} but gives the new
+  expression a name.  If you omit \texttt{expr} it defaults to \texttt{ANYTHING()};
+\item \texttt{REF(name)} — returns an expression that matches the same content as
+  matched previously by a \texttt{NAMED} group with name \texttt{name};
+\item \texttt{CHECK(predicate)} — matches the current expression if
+  \texttt{predicate(expression)} returns non-false;
+\item \texttt{END()} — matches only at the end of the array;
+\item \texttt{MANYNG}, \texttt{MORENG}, \texttt{MAYBENG}, \texttt{WHATEVERNG} — the non-greedy versions for
+  combinators involving backtracking.
+\end{itemize}
+
+Above when I wrote \texttt{expr, [expr, ...]} I meant to say that those functions
+take multiple arguments.  The following lines don't match the same
+expressions:
+
+
+\begin{minted}[frame=leftline,fontsize=\small,xleftmargin=\parindent]{js}
+GROUP("a", "b", "c");
+GROUP([ "a", "b", "c" ]);
+\end{minted}
+
+I tried to stress this in some examples.  The first one matches the sequence
+anywhere, while the second one asserts that the sequence is at the start of
+an array.
+\subsection{The \texttt{onmatch} function}
+\label{sec-4-1}
+
+
+The function you pass to \texttt{search()} recevies one parameter, let's call it
+\texttt{m}, that can be used to figure out various things about the match:
+
+\begin{itemize}
+\item \texttt{m.\$node} — the array where the current match is found;
+\item \texttt{m.\$start} — the index in \texttt{\$node} where the current match is found;
+\item \texttt{m.\$end} — the index where the match ends;
+\item \texttt{m.\$match()} — returns the current match as a \texttt{Match} object (see below);
+\item additionally, \texttt{NAMED} expressions insert properties into this object.
+\end{itemize}
+
+This function may modify \$node.  Some helper API is provided for this by
+\texttt{Match} objects.  If it returns anything, it must be a valid index in
+\texttt{\$node}, and searching will continue at that position.  Without a return
+value, the algorithm continues searching \textbf{after} the current match.
+\subsection{The \texttt{Match} objects}
+\label{sec-4-2}
+
+
+They have the following methods:
+
+\begin{itemize}
+\item \texttt{replace(content)} — replaces the current node with the given \texttt{content}
+  (which may be an array or a \texttt{Match} object);
+\item \texttt{swap(node)} — swap two \texttt{Match} objects — meaning that the content of one
+  replaces the content of the other in the original tree;
+\item \texttt{content()} — returns the content that this node matches, as an array;
+\item \texttt{first()} — returns the first node in the content; same as \texttt{content()[0]}.
+\end{itemize}
+\section{License}
+\label{sec-5}
+
+
+Copyright 2011 (c) Mihai Bazon <mihai.bazon@gmail.com>
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+\begin{itemize}
+\item Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+\item Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+\end{itemize}
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER “AS IS” AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+\end{document}
